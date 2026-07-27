@@ -1,0 +1,24 @@
+{
+  "name": "library-ingestion-service",
+  "version": "1.0.0",
+  "description": "Fetches files from S3, chunks text, generates OpenAI embeddings, and upserts into Qdrant.",
+  "main": "server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js",
+    "ingest": "node ingest.js"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.600.0",
+    "@google/genai": "^2.13.0",
+    "@qdrant/js-client-rest": "^1.9.0",
+    "body-parser": "^2.3.0",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "mammoth": "^1.7.2",
+    "nodemon": "^3.1.14",
+    "openai": "^4.52.0",
+    "pdf-parse": "^1.1.1",
+    "uuid": "^11.1.1"
+  }
+}
