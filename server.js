@@ -1,6 +1,9 @@
 require('dotenv').config();
 const express = require('express');
 const { ingestFile, deingestFile } = require('./ingest');
+const {getEmbeddings} = require("./lib/embeddings");
+const {searchChunks} = require("./lib/qdrant");
+const {generateReply} = require("./lib/generate");
 
 const app = express();
 app.use(express.json());
@@ -8,10 +11,7 @@ app.use(express.json());
 const PORT = process.env.PORT || 4000;
 const WEBHOOK_SECRET = process.env.INGEST_WEBHOOK_SECRET;
 
-/**
- * Shared-secret auth so this endpoint isn't publicly callable by anyone who finds the URL.
- * WordPress should send this in an "X-Ingest-Secret" header on every request.
- */
+
 function requireSecret(req, res, next) {
 //   if (!WEBHOOK_SECRET) {
 //     console.warn('[server] WARNING: INGEST_WEBHOOK_SECRET is not set — endpoint is unprotected!');
@@ -25,13 +25,12 @@ function requireSecret(req, res, next) {
   next();
 }
 
-/**
- * POST /ingest
- * Body: { attachment_id, s3_key, filename? }
- * Called by WordPress after a file is confirmed uploaded to S3.
- * Responds immediately with 202 and processes in the background,
- * so the WordPress-side cron job doesn't wait on a long-running request.
- */
+
+
+
+
+
+
 app.post('/ingest', (req, res) => {
     // res.status(200).json({ status: 'tested' });
   const { attachment_id, s3_key, filename } = req.body || {}; 
@@ -60,11 +59,14 @@ app.post('/ingest', (req, res) => {
     });
 });
 
-/**
- * POST /deingest
- * Body: { attachment_id }
- * Called by WordPress when a file/attachment is permanently deleted.
- */
+
+
+
+
+
+
+
+
 app.post('/deingest', requireSecret, (req, res) => {
   const { attachment_id } = req.body || {};
 
@@ -81,6 +83,39 @@ app.post('/deingest', requireSecret, (req, res) => {
         console.error(err);
     });
 });
+
+
+
+
+
+app.post('/chat', async (req, res) => {
+  const { question } = req.body;
+  if (!question) {
+    return res.status(400).json({ error: 'question is required' });
+  }
+  // try {
+    const [vector] = await getEmbeddings([question], 'RETRIEVAL_QUERY'); // array in, first vector out
+    const results = await searchChunks({ vector });                      // pass as { vector }
+    // call the gemini Model for the Reply
+    if(!results){
+      throw res.status(500).json({message: "Search result not found"})
+    }
+     const LLMreply = await generateReply({ question, chunks: results });
+
+    return res.status(200).json({ LLMreply });
+  // } catch (error) {
+  //   return res.status(500).json({ error: `Something went wrong: ${error}` });
+  // }
+});
+
+
+
+
+
+
+
+
+
 
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
