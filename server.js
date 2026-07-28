@@ -8,8 +8,16 @@ const {generateReply} = require("./lib/generate");
 const cors = require('cors');
 
 const app = express();
+app.use(cors({
+  origin: function (origin, callback) {
+    callback(null, origin); 
+  },
+  credentials: true,
+}));
+
+
 app.use(express.json());
-app.use(cors);
+
 
 const PORT = env.PORT || 4000;
 const WEBHOOK_SECRET = env.INGEST_WEBHOOK_SECRET;
