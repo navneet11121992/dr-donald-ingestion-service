@@ -33,33 +33,48 @@ function requireSecret(req, res, next) {
 
 
 
-app.post('/ingest', (req, res) => {
-    // res.status(200).json({ status: 'tested' });
-  const { attachment_id, s3_key, filename } = req.body || {}; 
+app.post('/ingest', requireSecret, (req, res) => {
+	let response = {};
+	let statusCode = 202; // default to accepted
+	const { attachment_id, s3_key, filename } = req.body || {}; 
 
-  console.log(req.body);
-  console.log(attachment_id);
-  console.log(s3_key);
-  console.log(filename);
+	// console.log(req.body);
+	// console.log(attachment_id);
+	// console.log(s3_key);
+	// console.log(filename);
 
-  if (!attachment_id || !s3_key) { 
-    return res.status(400).json({ error: 'attachment_id and s3_key are required' });
-  }
+	if (!attachment_id || !s3_key) { 
+		return res.status(400).json({ error: 'attachment_id and s3_key are required' });
+	}
 
-  // Acknowledge immediately — actual work continues after the response is sent
-  res.status(202).json({ status: 'accepted', attachment_id });  
+	// Acknowledge immediately — actual work continues after the response is sent
+	// res.status(202).json({ status: 'accepted', attachment_id });  
 
-  ingestFile({ attachmentId: attachment_id, s3Key: s3_key, filename })
-    .then((result) => {
-      console.log(`[server] Ingestion complete for attachment ${attachment_id}`, result);
-      // Optional: call back to WordPress here to update _ingestion_triggered / status meta
-      // e.g. notifyWordPress(attachment_id, 'completed');
-    })
-    .catch((err) => {
-      console.error(`[server] Ingestion failed for attachment ${attachment_id}:`, err.message);
-      console.error(err);
-      // Optional: notifyWordPress(attachment_id, 'failed', err.message);
-    });
+	console.log(`[server] Starting ingestion for attachment ${attachment_id}, s3://${process.env.S3_BUCKET}/${s3_key}`);
+
+	ingestFile({ attachmentId: attachment_id, s3Key: s3_key, filename })
+		.then((result) => {
+			response = result;
+			statusCode = 200;
+			console.log(`[server] Ingestion complete for attachment ${attachment_id}`, result);
+
+			res.status(statusCode).json(response);
+		// Optional: call back to WordPress here to update _ingestion_triggered / status meta
+		// e.g. notifyWordPress(attachment_id, 'completed');
+		})
+		.catch((err) => {
+			console.error(`[server] Ingestion failed for attachment ${attachment_id}:`, err.message);
+			console.error(err);
+			response = err;
+			statusCode = 500;
+			res.status(statusCode).json(response);
+			
+		// Optional: notifyWordPress(attachment_id, 'failed', err.message);
+	});
+	
+	
+	
+	
 });
 
 
@@ -71,20 +86,24 @@ app.post('/ingest', (req, res) => {
 
 
 app.post('/deingest', requireSecret, (req, res) => {
-  const { attachment_id } = req.body || {};
+	const { attachment_id } = req.body || {};
 
-  if (!attachment_id) {
-    return res.status(400).json({ error: 'attachment_id is required' });
-  }
+	if (!attachment_id) {
+		return res.status(400).json({ error: 'attachment_id is required' });
+	}
 
-  res.status(202).json({ status: 'accepted', attachment_id });
-
-  deingestFile(attachment_id)
-    .then(() => console.log(`[server] De-ingestion complete for attachment ${attachment_id}`))
-    .catch((err) => {
-        console.error(`[server] De-ingestion failed for attachment ${attachment_id}:`, err.message);
-        console.error(err);
-    });
+	// res.status(202).json({ status: 'accepted', attachment_id });
+	console.log(`[server] Starting de-ingestion for attachment ${attachment_id}`);
+	deingestFile(attachment_id)
+		.then((response) => {
+			console.log(`[server] De-ingestion complete for attachment ${attachment_id}`);
+			res.status(200).json(response);
+			})
+	.catch((err) => {
+		console.error(`[server] De-ingestion failed for attachment ${attachment_id}:`, err.message);
+		console.error(err);
+		res.status(500).json({ error: err.message });
+	});
 });
 
 
