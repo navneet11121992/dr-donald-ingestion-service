@@ -1,0 +1,28 @@
+
+const {ApiError} = require('../utils/apiErrors');
+
+const errorHandler = (error, req, res, next) => {
+  const statusCode =
+    error instanceof ApiError && Number.isInteger(error.statusCode)
+      ? error.statusCode
+      : 500;
+
+  const message = error?.message || 'Internal Server Error';
+
+  const line = `[${new Date().toISOString()}] ${req.method} ${req.originalUrl} → ${statusCode} — ${message}`;
+
+  if (statusCode >= 500) {
+    console.error(`\n❌ ${line}`);
+    console.error(error);                                 
+    if (error?.cause) {
+      console.error('  ↳ CAUSE:', error.cause);           
+    }
+    console.error('');
+  } else {
+    console.warn(`⚠️  ${line}`);                          
+  }
+
+  res.status(statusCode).json({ success: false, message });
+};
+
+module.exports= {errorHandler};
