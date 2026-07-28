@@ -13,15 +13,16 @@ const WEBHOOK_SECRET = process.env.INGEST_WEBHOOK_SECRET;
 
 
 function requireSecret(req, res, next) {
-//   if (!WEBHOOK_SECRET) {
-//     console.warn('[server] WARNING: INGEST_WEBHOOK_SECRET is not set — endpoint is unprotected!');
-//     return next();
-//   }
+  if (!WEBHOOK_SECRET) {
+    console.warn('[server] WARNING: INGEST_WEBHOOK_SECRET is not set — endpoint is unprotected!');
+    return next();
+  }
 
-//   const provided = req.get('X-Ingest-Secret');
-//   if (provided !== WEBHOOK_SECRET) {
-//     return res.status(401).json({ error: 'Unauthorized' });
-//   }
+  const provided = req.get('X-Ingest-Secret');
+  console.log(`[server] Provided secret: ${provided}, Expected secret: ${WEBHOOK_SECRET}`);
+  if (provided !== WEBHOOK_SECRET) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
   next();
 }
 
@@ -55,6 +56,7 @@ app.post('/ingest', (req, res) => {
     })
     .catch((err) => {
       console.error(`[server] Ingestion failed for attachment ${attachment_id}:`, err.message);
+      console.error(err);
       // Optional: notifyWordPress(attachment_id, 'failed', err.message);
     });
 });
