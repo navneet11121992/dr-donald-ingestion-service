@@ -1,4 +1,5 @@
 require('dotenv').config();
+const env = require('./lib/config/env')
 const express = require('express');
 const { ingestFile, deingestFile } = require('./ingest');
 const {getEmbeddings} = require("./lib/embeddings");
@@ -8,8 +9,8 @@ const {generateReply} = require("./lib/generate");
 const app = express();
 app.use(express.json());
 
-const PORT = process.env.PORT || 4000;
-const WEBHOOK_SECRET = process.env.INGEST_WEBHOOK_SECRET;
+const PORT = env.PORT || 4000;
+const WEBHOOK_SECRET = env.INGEST_WEBHOOK_SECRET;
 
 
 function requireSecret(req, res, next) {
@@ -111,22 +112,30 @@ app.post('/deingest', requireSecret, (req, res) => {
 
 app.post('/chat', async (req, res) => {
   const { question } = req.body;
-  if (!question) {
-    return res.status(400).json({ error: 'question is required' });
-  }
-  // try {
-    const [vector] = await getEmbeddings([question], 'RETRIEVAL_QUERY'); // array in, first vector out
-    const results = await searchChunks({ vector });                      // pass as { vector }
-    // call the gemini Model for the Reply
-    if(!results){
-      throw res.status(500).json({message: "Search result not found"})
-    }
-     const LLMreply = await generateReply({ question, chunks: results });
 
-    return res.status(200).json({ LLMreply });
-  // } catch (error) {
-  //   return res.status(500).json({ error: `Something went wrong: ${error}` });
-  // }
+  // Validate input: must be a non-empty string
+  if (typeof question !== 'string' || question.trim().length === 0) {
+    return res.status(400).json({ error: 'A non-empty "question" is required.' });
+  }
+
+  try {
+    const [vector] = await getEmbeddings([question], 'RETRIEVAL_QUERY');
+    if (!vector) {
+      return res.status(502).json({ error: 'Failed to generate embeddings for the question.' });
+    }
+    const chunks = await searchChunks({ vector });
+    if (chunks.length === 0) {
+      return res.status(200).json({
+        reply: "I couldn't find any relevant information to answer that question.",
+        chunks: [],
+      });
+    }
+    const reply = await generateReply({ question, chunks });
+    return res.status(200).json({ reply });
+  } catch (error) {
+    console.error('POST /chat failed:', error); // full error stays server-side
+    return res.status(500).json({ error: 'Something went wrong while processing your request.' });
+  }
 });
 
 
