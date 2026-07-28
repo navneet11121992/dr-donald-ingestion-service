@@ -71,22 +71,22 @@ async function deingestFile(attachmentId) {
 module.exports = { ingestFile, deingestFile };
 
 // --- CLI usage: node ingest.js <attachmentId> <s3Key> [filename] ---
-if (require.main === module) {
-  const [, , attachmentIdArg, s3KeyArg, filenameArg] = process.argv;
+// if (require.main === module) {
+//   const [, , attachmentIdArg, s3KeyArg, filenameArg] = process.argv;
 
-  if (!attachmentIdArg || !s3KeyArg) {
-    console.error('Usage: node ingest.js <attachmentId> <s3Key> [filename]');
-    process.exit(1);
-  }
+//   if (!attachmentIdArg || !s3KeyArg) {
+//     console.error('Usage: node ingest.js <attachmentId> <s3Key> [filename]');
+//     process.exit(1);
+//   }
 
-  ingestFile({
-    attachmentId: parseInt(attachmentIdArg, 10),
-    s3Key: s3KeyArg,
-    filename: filenameArg,
-  })
-    .then(() => process.exit(0))
-    .catch((err) => {
-      console.error('[ingest] Failed:', err.message);
-      process.exit(1);
-    });
-}
+//   ingestFile({
+//     attachmentId: parseInt(attachmentIdArg, 10),
+//     s3Key: s3KeyArg,
+//     filename: filenameArg,
+//   })
+//     .then(() => process.exit(0))
+//     .catch((err) => {
+//       console.error('[ingest] Failed:', err.message);
+//       process.exit(1);
+//     });
+// }
