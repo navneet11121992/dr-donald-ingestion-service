@@ -7,7 +7,7 @@ const { getEmbeddings } = require('./lib/embeddings');
 const { ensureCollection, upsertChunks, deleteByAttachmentId } = require('./lib/qdrant');
 
 const CHUNK_SIZE = parseInt(process.env.CHUNK_SIZE || '1000', 10);
-const CHUNK_OVERLAP = parseInt(process.env.CHUNK_OVERLAP || '150', 10);
+const CHUNK_OVERLAP = parseInt(process.env.CHUNK_OVERLAP || '150', 10); 
 
 /**
  * Full ingestion pipeline: S3 -> extract -> chunk -> embed -> upsert into Qdrant.
