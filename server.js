@@ -5,7 +5,7 @@ const { ingestFile, deingestFile } = require('./ingest');
 const {getEmbeddings} = require("./lib/embeddings");
 const {searchChunks} = require("./lib/qdrant");
 const {generateReply} = require("./lib/generate");
-const {cors} = require('cors');
+const cors = require('cors');
 
 const app = express();
 app.use(cors({
