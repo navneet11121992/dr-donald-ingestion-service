@@ -1,126 +1,106 @@
 require('dotenv').config();
-const env = require('./lib/config/env')
+const env = require('./lib/config/env');
 const express = require('express');
 const { ingestFile, deingestFile } = require('./ingest');
-const {getEmbeddings} = require("./lib/embeddings");
-const {searchChunks} = require("./lib/qdrant");
-const {generateReply} = require("./lib/generate");
-const {requireSecret} = require("./lib/middleware/middleware");
-const {ApiError} = require('./lib/utils/apiErrors');
+const { getEmbeddings } = require('./lib/embeddings');
+const { searchChunks } = require('./lib/qdrant');
+const { generateReply } = require('./lib/generate');
+const { requireSecret } = require('./lib/middleware/middleware');
+const { errorHandler } = require('./lib/middleware/errorHandler');
+const { ApiError } = require('./lib/utils/apiErrors');
 const cors = require('cors');
 
 const app = express();
 app.use(cors({
   origin: function (origin, callback) {
-    callback(null, origin); 
+    callback(null, origin);
   },
   credentials: true,
 }));
 
-
 app.use(express.json());
 
+// Catch malformed JSON bodies -> 400 instead of a generic 500
+app.use((err, req, res, next) => {
+  if (err.type === 'entity.parse.failed') {
+    return next(new ApiError(400, 'Invalid JSON in request body'));
+  }
+  next(err);
+});
 
 const PORT = env.PORT || 4000;
 
+// Wraps an async route so any thrown/rejected error reaches errorHandler
+const asyncHandler = (fn) => (req, res, next) => {
+  Promise.resolve(fn(req, res, next)).catch(next);
+};
 
-const asyncHandler = (fn) => (req, res, next) =>{
-	Promise.resolve(fn(req, res, next)).catch(next);
-}
-  
+app.post('/ingest', requireSecret, asyncHandler(async (req, res) => {
+  const { attachment_id, s3_key, filename } = req.body || {};
 
-
-
-app.post('/ingest', requireSecret, (req, res) => {
-	let response = {};
-	let statusCode = 202; // default to accepted
-	const { attachment_id, s3_key, filename } = req.body || {}; 
-
-	if (!attachment_id || !s3_key) { 
-		return res.status(400).json({ error: 'attachment_id and s3_key are required' });
-	}
-
-	console.log(`[server] Starting ingestion for attachment ${attachment_id}, s3://${process.env.S3_BUCKET}/${s3_key}`);
-
-	ingestFile({ attachmentId: attachment_id, s3Key: s3_key, filename })
-		.then((result) => {
-			response = result;
-			statusCode = 200;
-			console.log(`[server] Ingestion complete for attachment ${attachment_id}`, result);
-
-			res.status(statusCode).json(response);
-		})
-		.catch((err) => {
-			console.error(`[server] Ingestion failed for attachment ${attachment_id}:`, err.message);
-			console.error(err);
-			response = err;
-			statusCode = 500;
-			res.status(statusCode).json(response);
-	});
-	
-	
-	
-	
-});
-
-
-
-app.post('/deingest', requireSecret, (req, res) => {
-	const { attachment_id } = req.body || {};
-
-	if (!attachment_id) {
-		return res.status(400).json({ error: 'attachment_id is required' });
-	}
-
-	// res.status(202).json({ status: 'accepted', attachment_id });
-	console.log(`[server] Starting de-ingestion for attachment ${attachment_id}`);
-	deingestFile(attachment_id)
-		.then((response) => {
-			console.log(`[server] De-ingestion complete for attachment ${attachment_id}`);
-			res.status(200).json(response);
-			})
-	.catch((err) => {
-		console.error(`[server] De-ingestion failed for attachment ${attachment_id}:`, err.message);
-		console.error(err);
-		res.status(500).json({ error: err.message });
-	});
-});
-
-
-
-app.post('/chat',	requireSecret ,  asyncHandler(async (req, res) => {
-  const { question } = req.body;
-
-  // Validate input: must be a non-empty string
-  if (typeof question !== 'string' || question.trim().length === 0) {
-    // return res.status(400).json({ error: 'A non-empty "question" is required.' });
-	throw new ApiError(400, 'A non-empty question is required.');
+  if (!attachment_id || !s3_key) {
+    throw new ApiError(400, 'attachment_id and s3_key are required');
   }
 
-  try {
-    const [vector] = await getEmbeddings([question], 'RETRIEVAL_QUERY');
-    if (!vector) {
-      throw new ApiError(502, 'Failed to generate embeddings for the question.');
-    }
-    const chunks = await searchChunks({ vector });
-    if (chunks.length === 0) {
-      return res.status(200).json({
-        reply: "I couldn't find any relevant information to answer that question.",
-        chunks: [],
-      });
-    }
-    const reply = await generateReply({ question, chunks });
-    return res.status(200).json({ reply });
-  } catch (error) {
-    console.error('POST /chat failed:', error); // full error stays server-side
-    return res.status(500).json({ error: 'Something went wrong while processing your request.' });
-  }
+  console.log(`[server] Starting ingestion for attachment ${attachment_id}, s3://${process.env.S3_BUCKET}/${s3_key}`);
+
+  const result = await ingestFile({ attachmentId: attachment_id, s3Key: s3_key, filename });
+
+  console.log(`[server] Ingestion complete for attachment ${attachment_id}`, result);
+  res.status(200).json(result);
 }));
 
+app.post('/deingest', requireSecret, asyncHandler(async (req, res) => {
+  const { attachment_id } = req.body || {};
 
+  if (!attachment_id) {
+    throw new ApiError(400, 'attachment_id is required');
+  }
+
+  console.log(`[server] Starting de-ingestion for attachment ${attachment_id}`);
+  const result = await deingestFile(attachment_id);
+
+  console.log(`[server] De-ingestion complete for attachment ${attachment_id}`);
+  res.status(200).json(result);
+}));
+
+app.post('/chat', requireSecret, asyncHandler(async (req, res) => {
+  const { question } = req.body || {};
+
+  if (typeof question !== 'string' || question.trim().length === 0) {
+    throw new ApiError(400, 'A non-empty question is required.');
+  }
+
+  const [vector] = await getEmbeddings([question], 'RETRIEVAL_QUERY');
+  if (!vector) {
+    throw new ApiError(502, 'Failed to generate embeddings for the question.');
+  }
+
+  const chunks = await searchChunks({ vector });
+  if (chunks.length === 0) {
+    return res.status(200).json({
+      reply: "I couldn't find any relevant information to answer that question.",
+      chunks: [],
+    });
+  }
+
+  const reply = await generateReply({ question, chunks });
+  return res.status(200).json({ reply });
+}));
+
+app.get('/test-error', (req, res) => {
+	throw new ApiError(500, 'Failed to generate embeddings for the question.');
+});
 
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
+// 404 for unknown routes
+app.use((req, res, next) => {
+  next(new ApiError(404, `Route not found: ${req.method} ${req.originalUrl}`));
+});
+
+// Central error handler — MUST be last
+app.use(errorHandler);
 
 app.listen(PORT, () => {
   console.log(`[server] Ingestion service listening on port ${PORT}`);
