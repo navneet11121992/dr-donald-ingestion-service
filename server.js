@@ -88,9 +88,7 @@ app.post('/chat', requireSecret, asyncHandler(async (req, res) => {
   return res.status(200).json({ reply });
 }));
 
-app.get('/test-error', (req, res) => {
-	throw new ApiError(500, 'Failed to generate embeddings for the question.');
-});
+
 
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
