@@ -5,10 +5,13 @@ const { ingestFile, deingestFile } = require('./ingest');
 const { getEmbeddings } = require('./lib/embeddings');
 const { searchChunks } = require('./lib/qdrant');
 const { generateReply } = require('./lib/generate');
-const { requireSecret } = require('./lib/middleware/middleware');
+const { requireSecret , asyncHandler } = require('./lib/middleware/middleware');
 const { errorHandler } = require('./lib/middleware/errorHandler');
 const { ApiError } = require('./lib/utils/apiErrors');
+const {chatLimiter} = require('./lib/middleware/rateLimiter');
 const cors = require('cors');
+
+
 
 const app = express();
 app.use(cors({
@@ -28,12 +31,9 @@ app.use((err, req, res, next) => {
   next(err);
 });
 
-const PORT = env.PORT || 4000;
+const PORT = env.PORT;
 
-// Wraps an async route so any thrown/rejected error reaches errorHandler
-const asyncHandler = (fn) => (req, res, next) => {
-  Promise.resolve(fn(req, res, next)).catch(next);
-};
+
 
 app.post('/ingest', requireSecret, asyncHandler(async (req, res) => {
   const { attachment_id, s3_key, filename } = req.body || {};
@@ -64,11 +64,15 @@ app.post('/deingest', requireSecret, asyncHandler(async (req, res) => {
   res.status(200).json(result);
 }));
 
-app.post('/chat', requireSecret, asyncHandler(async (req, res) => {
+app.post('/chat', chatLimiter, requireSecret, asyncHandler(async (req, res) => {
   const { question } = req.body || {};
 
-  if (typeof question !== 'string' || question.trim().length === 0) {
+  if (typeof question !== 'string') {
     throw new ApiError(400, 'A non-empty question is required.');
+  };
+  
+  if(question.trim().length === 0 || question.trim().length > 1000){
+      throw new ApiError(400, 'Question must be between 1 and 1000 characters.');
   }
 
   const [vector] = await getEmbeddings([question], 'RETRIEVAL_QUERY');
