@@ -88,7 +88,7 @@ async function ingestFile({ attachmentId, s3Key, filename }) {
 	const { buffer } = await fetchFileFromS3(s3Key);
 
 	console.log(`[ingest] Extracting text from ${resolvedFilename}`);
-	const text = await extractText(buffer, resolvedFilename);
+	const{  text, method}= await extractText(buffer, resolvedFilename);
 
 	if (!text || !text.trim()) {
 		// 422: request was fine, but the file content can't be processed
@@ -120,7 +120,7 @@ async function ingestFile({ attachmentId, s3Key, filename }) {
 	const upserted = await upsertChunks({ attachmentId, s3Key, chunks, vectors });
 
 	console.log(`[ingest] Done. ${upserted} chunk(s) ingested for attachment ${attachmentId}.`);
-	return { attachmentId, s3Key, chunksIngested: upserted };
+	return { attachmentId, s3Key, chunksIngested: upserted, method  };
 }
 
 
